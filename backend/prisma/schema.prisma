@@ -1,0 +1,113 @@
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Customer {
+  id           String   @id @default(uuid())
+  fullName     String
+  email        String?  @unique
+  phone        String?  @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  business Business?
+}
+
+model Business {
+  id        String   @id @default(uuid())
+  name      String
+  ownerId   String   @unique
+  createdAt DateTime @default(now())
+
+  owner            Customer         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  messages         SupportMessage[]
+  knowledgeSources KnowledgeSource[]
+  conversations    Conversation[]
+}
+
+model SupportMessage {
+  id         String   @id @default(uuid())
+  businessId String
+  sessionId  String
+  message    String
+  sender     Sender
+  createdAt  DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, sessionId])
+}
+
+enum Sender {
+  SHOPPER
+  AI
+  HUMAN
+
+  @@map("SupportSender")
+}
+
+enum KnowledgeSourceType {
+  TEXT
+  DOCUMENT
+  IMAGE
+  WEBSITE
+}
+
+enum KnowledgeSourceStatus {
+  PROCESSING
+  READY
+  FAILED
+}
+
+
+model KnowledgeSource {
+  id            String                @id @default(uuid())
+  businessId    String
+  type          KnowledgeSourceType
+  status        KnowledgeSourceStatus @default(PROCESSING)
+  title         String?
+  sourceUrl     String?
+  originalName  String?
+  mimeType      String?
+  storagePath   String?
+  extractedText String?               @db.Text
+  errorMessage  String?               @db.Text
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, createdAt])
+}
+
+enum ConversationStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
+model Conversation {
+  id             String             @id @default(uuid())
+  businessId     String
+  sessionId      String
+  status         ConversationStatus @default(OPEN)
+  needsHuman     Boolean            @default(false)
+  humanHandoffAt DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, sessionId])
+  @@index([businessId, status])
+}
+
+
+
+
