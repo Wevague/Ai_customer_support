@@ -1,5 +1,8 @@
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { apiRequest } from './api'
+import Login from './components/Login'
+import Register from './components/Register'
 import {
   LayoutDashboard,
   MessageSquare,
@@ -26,7 +29,7 @@ type Message = {
 }
 
 type Conversation = {
-  id: number
+  id: string
   name: string
   email: string
   preview: string
@@ -35,83 +38,100 @@ type Conversation = {
   messages: Message[]
 }
 
-const initialConversations: Conversation[] = [
-  {
-    id: 1,
-    name: 'Rahul Menon',
-    email: 'rahul@example.com',
-    preview: 'How long does delivery take?',
-    time: '10:42 AM',
-    status: 'OPEN',
-    messages: [
-      {
-        id: 1,
-        sender: 'customer',
-        text: 'Hi! I want to know about your delivery policy.',
-        time: '10:40 AM',
-      },
-      {
-        id: 2,
-        sender: 'ai',
-        text: 'Hello! I can help with that. What would you like to know about delivery?',
-        time: '10:41 AM',
-      },
-      {
-        id: 3,
-        sender: 'customer',
-        text: 'How long does delivery take?',
-        time: '10:42 AM',
-      },
-    ],
-  },
-  {
-    id: 2,
-    name: 'Anjali Nair',
-    email: 'anjali@example.com',
-    preview: 'Is this product available?',
-    time: '10:18 AM',
-    status: 'IN_PROGRESS',
-    messages: [
-      {
-        id: 4,
-        sender: 'customer',
-        text: 'Is the oil dispenser available?',
-        time: '10:18 AM',
-      },
-      {
-        id: 5,
-        sender: 'ai',
-        text: 'I can help you with product availability.',
-        time: '10:19 AM',
-      },
-    ],
-  },
-  {
-    id: 3,
-    name: 'Arjun Das',
-    email: 'arjun@example.com',
-    preview: 'Thank you for your help!',
-    time: 'Yesterday',
-    status: 'RESOLVED',
-    messages: [
-      {
-        id: 6,
-        sender: 'customer',
-        text: 'Thank you for your help!',
-        time: 'Yesterday',
-      },
-    ],
-  },
-]
+type BackendConversation = {
+  sessionId: string
+  latestMessage: string
+  latestMessageAt: string | Date
+}
+
+type BackendConversationStatus = {
+  sessionId: string
+  status: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED'
+}
+
+type BackendMessage = {
+  id: string
+  sender: 'SHOPPER' | 'AI' | 'HUMAN'
+  message: string
+  createdAt: string | Date
+}
 
 function App() {
-  const [conversations, setConversations] = useState(initialConversations)
-  const [selectedId, setSelectedId] = useState(1)
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [draft, setDraft] = useState('')
   const [filter, setFilter] = useState('ALL')
-
+  const [authPage, setAuthPage] = useState<'login' | 'register'>('login')
+const [isLoggedIn, setIsLoggedIn] = useState(
+  () => sessionStorage.getItem('isLoggedIn') === 'true',
+)
   const selected = conversations.find((item) => item.id === selectedId)
+
+  useEffect(() => {
+  if (!isLoggedIn) return
+
+  async function loadConversations() {
+    try {
+      const [backendConversations, backendStatuses] =
+        await Promise.all([
+          apiRequest<BackendConversation[]>(
+            '/messages/conversations',
+          ),
+          apiRequest<BackendConversationStatus[]>(
+            '/messages/conversation-statuses',
+          ),
+        ])
+
+      const statusMap = new Map(
+        backendStatuses.map((item) => [
+          item.sessionId,
+          item.status,
+        ]),
+      )
+
+      const loadedConversations: Conversation[] =
+        backendConversations.map((item) => {
+          const status =
+            statusMap.get(item.sessionId) ?? 'OPEN'
+
+          const date = new Date(item.latestMessageAt)
+
+          return {
+            id: item.sessionId,
+            name: `Customer ${item.sessionId.slice(0, 6)}`,
+            email: 'Customer conversation',
+            preview: item.latestMessage,
+            time: date.toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+            }),
+            status,
+            messages: [],
+          }
+        })
+
+      setConversations(loadedConversations)
+
+      setSelectedId((currentId) => {
+        if (
+          currentId &&
+          loadedConversations.some(
+            (conversation) => conversation.id === currentId,
+          )
+        ) {
+          return currentId
+        }
+
+        return loadedConversations[0]?.id ?? null
+      })
+    } catch (error) {
+      console.error('Failed to load conversations:', error)
+    }
+  }
+
+  loadConversations()
+}, [isLoggedIn])
 
   const filteredConversations = conversations.filter((conversation) => {
     const matchesSearch =
@@ -164,6 +184,28 @@ function App() {
       ),
     )
   }
+ 
+
+if (!isLoggedIn) {
+  if (authPage === 'register') {
+    return (
+      <Register
+        onRegistered={() => setAuthPage('login')}
+      />
+    )
+  }
+
+  return (
+    <Login
+      onLogin={() => {
+        sessionStorage.setItem('isLoggedIn', 'true')
+        setIsLoggedIn(true)
+      }}
+      onRegister={() => setAuthPage('register')}
+    />
+  )
+}
+
 
   return (
     <div className="app-shell">

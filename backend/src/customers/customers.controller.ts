@@ -1,9 +1,10 @@
 import { RegisterCustomerDto } from './dto/register-customer.dto.js';
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Post ,Res} from '@nestjs/common';
 import { Get, UseGuards, Req } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { CustomersService } from './customers.service.js';
 import { LoginCustomerDto } from './dto/login-customer.dto.js';
+import type { Response } from 'express';
 
 @Controller('customers')
 export class CustomersController {
@@ -17,10 +18,22 @@ register(@Body() body: RegisterCustomerDto) {
 }
 
 @Post('login')
-login(@Body() body: LoginCustomerDto) {
-  return this.customersService.login(body);
-}
+async login(
+  @Body() body: LoginCustomerDto,
+  @Res({ passthrough: true }) response: Response,
+) {
+  const result = await this.customersService.login(body);
 
+  response.cookie('accessToken', result.accessToken, {
+    httpOnly: true,
+    secure: false,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 60 * 60 * 1000,
+  });
+
+  return { message: result.message };
+}
 
 @Get('profile')
 @UseGuards(JwtAuthGuard)
